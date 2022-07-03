@@ -1,0 +1,18 @@
+
+.logo{
+    position: absolute;
+    max-width: 50px;
+}
+.btn-div{
+    justify-content: center;
+}
+.btnStart{
+    padding: .1rem 4rem .3rem !important;
+}
+
+.error-div{
+    max-width: 300px;
+    border-radius: 0.25rem;
+    font-weight: 700;
+    font-size: 2rem;
+}

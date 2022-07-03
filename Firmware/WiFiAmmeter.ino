@@ -20,11 +20,12 @@ static constexpr const unsigned int WEB_SERVER_LISTENING_PORT = 80;
 // Pins
 static constexpr const unsigned int PROTECTIVE_RELAY_PIN = 16;
 static constexpr const unsigned int SWITCH_RELAY_PIN = 14;
+static constexpr const unsigned int ANALOG_PIN = A0;
 
 // Ampers
-static constexpr const unsigned int MAX_AMPERE_VALUE = 30;
-static constexpr const unsigned int SWITCH_AMPERE_VALUE = 5;
-static constexpr const unsigned int EXCESS_AMPERE_VALUE = -1;
+static constexpr const float MAX_AMPERE_VALUE = 30;
+static constexpr const float SWITCH_AMPERE_VALUE = 5;
+static constexpr const float EXCESS_AMPERE_VALUE = -1.0;
 /******************** End config ********************/
 
 // Debug out
@@ -36,20 +37,42 @@ static constexpr const unsigned int EXCESS_AMPERE_VALUE = -1;
 #define DEBUG_LN(msg)
 #endif
 
+enum class SwitchRelayState
+{
+    LowState = 0,
+    HighState
+};
+
 static constexpr const char *defaultContentType = "text/html";
+static constexpr const char *crossOrigin = "Access-Control-Allow-Origin";
 
-static ESP8266WebServer webServer(WEB_SERVER_LISTENING_PORT);
-static bool runMeasure = false;
+static ESP8266WebServer g_webServer(WEB_SERVER_LISTENING_PORT);
+static bool g_runMeasure = false;
+static float g_ampereValue = EXCESS_AMPERE_VALUE;
+static SwitchRelayState g_SwitchRelayState = SwitchRelayState::LowState;
 
-void pushAmpereToQueue(unsigned int value)
+unsigned long test_cnt = 0; // test
+
+void updateAmpereValue()
 {
-    // TODO: push to queue
-}
-
-unsigned int getAmpereValue()
-{
-    // TODO: implement this function
-    return 1;
+    /*static constexpr const unsigned int maxAnalogValue = 1023;
+    const int currentValue =analogRead(ANALOG_PIN);
+    if (g_SwitchRelayState == SwitchRelayState::LowState)
+    {
+        g_ampereValue = (float)(currentValue);
+    }
+    else // HIGH
+    {
+        g_ampereValue = (float)(currentValue);
+    }*/
+    // tets
+    if (test_cnt++ == 5000)
+    {
+        g_ampereValue = MAX_AMPERE_VALUE+1;
+        test_cnt = 0;
+        return;
+    }
+    g_ampereValue = random(MAX_AMPERE_VALUE);
 }
 
 /* Relay controll */
@@ -65,39 +88,46 @@ void disableProtectiveRelay()
 
 void setHighSwitchRelay()
 {
-    digitalWrite(SWITCH_RELAY_PIN, HIGH);
+    if (g_SwitchRelayState != SwitchRelayState::HighState)
+    {
+        digitalWrite(SWITCH_RELAY_PIN, HIGH);
+        g_SwitchRelayState = SwitchRelayState::HighState;
+        DEBUG_LN("Switch to high");
+    }
 }
 
 void setLowSwitchRelay()
 {
-    digitalWrite(SWITCH_RELAY_PIN, LOW);
+    if (g_SwitchRelayState != SwitchRelayState::LowState)
+    {
+        digitalWrite(SWITCH_RELAY_PIN, LOW);
+        g_SwitchRelayState = SwitchRelayState::LowState;
+        DEBUG_LN("Switch to low");
+    }
 }
 
 /* WEB-API handlers */
-void rootRqHandle()
-{
-    webServer.send(200, "text/html", "<h1>Main</h1>");
-}
-
 void notFoundPage()
 {
-    webServer.send(404, defaultContentType, "");
+    g_webServer.send(404, defaultContentType, "");
 }
 
 void setCurrentNormalRqHandle()
 {
     disableProtectiveRelay();
-    runMeasure = true;
-    webServer.send(200, defaultContentType, "");
+    g_runMeasure = true;
+    g_webServer.sendHeader(crossOrigin, "*");
+    g_webServer.send(200, defaultContentType, "");
 }
 
 void getValueRqHandle()
 {
-    // TODO: pop from queue and send
     char sendBuf[16];
     memset(sendBuf, 0, sizeof(sendBuf));
-    ltoa(millis(), sendBuf, 10);
-    webServer.send(200, defaultContentType, sendBuf);
+    sprintf(sendBuf, "%f", (float)g_ampereValue);
+
+    g_webServer.sendHeader(crossOrigin, "*");
+    g_webServer.send(200, defaultContentType, sendBuf);
 }
 
 void setup()
@@ -119,21 +149,23 @@ void setup()
         return;
     }
 
-    DEBUG_LN("WifiAP SSID:");
-    DEBUG(WIFI_AP_SSID);
+    DEBUG("WifiAP SSID:");
+    DEBUG_LN(WIFI_AP_SSID);
 
-    // Config web server;
-    webServer.on("/", rootRqHandle);
-    webServer.onNotFound(notFoundPage);
+    DEBUG("WifiAP PASSWORD:");
+    DEBUG_LN(WIFI_AP_PASS);
+
+    // Config web server
+    g_webServer.onNotFound(notFoundPage);
 
     // Registration handlers for API
     DEBUG_LN("Registration handlers for web API ...");
 
-    webServer.on("/s", setCurrentNormalRqHandle);
-    webServer.on("/v", getValueRqHandle);
+    g_webServer.on("/s", setCurrentNormalRqHandle);
+    g_webServer.on("/v", getValueRqHandle);
 
     // Run web sever
-    webServer.begin();
+    g_webServer.begin();
     DEBUG("Web-server started on port:");
     DEBUG_LN(WEB_SERVER_LISTENING_PORT);
 
@@ -150,33 +182,29 @@ void setup()
 
 void loop()
 {
-    webServer.handleClient();
+    g_webServer.handleClient();
 
-    if (!runMeasure)
+    if (!g_runMeasure)
         return;
 
-    unsigned int current = getAmpereValue();
-    pushAmpereToQueue(current);
+    updateAmpereValue();
 
     // Over current -> enable protection
-    if (current > MAX_AMPERE_VALUE)
+    if (g_ampereValue > MAX_AMPERE_VALUE)
     {
+        DEBUG_LN("Over current");
+        DEBUG_LN(g_ampereValue);
+
         enableProtectiveRelay();
         setHighSwitchRelay();
-        runMeasure = false;
+        g_runMeasure = false;
+        g_ampereValue = EXCESS_AMPERE_VALUE;
         return;
     }
 
     // Set switch relay to low
-    if (current < SWITCH_AMPERE_VALUE)
-    {
+    if (g_ampereValue < SWITCH_AMPERE_VALUE)
         setLowSwitchRelay();
-
-        do
-        {
-            current = getAmpereValue();
-            pushAmpereToQueue(current);
-            webServer.handleClient();
-        } while (current < SWITCH_AMPERE_VALUE);
-    }
+    else
+        setHighSwitchRelay();
 }

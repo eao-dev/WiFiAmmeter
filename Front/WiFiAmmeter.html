@@ -1,0 +1,35 @@
+<html>
+
+<head>
+    <title>WiFi ammeter</title>
+
+    <!-- meta -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- css -->
+    <link rel="stylesheet" href="bp/css/bootstrap.min.css">
+    <link rel="stylesheet" href="chartist/chartist.min.css">
+    <link rel="stylesheet" href="style/style.css">
+
+    <!-- js -->
+    <script src="main.js"></script>
+    <script src="chartist/chartist.min.js"></script>
+</head>
+
+<body>
+    <div class="header">
+
+        <img src="logo.jpg" class="logo m-2" alt="Logo">
+
+        <div class="btn-div p-4 d-flex align-items-center">
+            <button id="buttonStart" class="btn btn-success btnStart">Start</button>  
+        </div>  
+
+    </div>
+    
+    <div class="error-div m-auto text-center p-4 text-danger" id="error"></div>
+
+    <div class="ct-chart ct-golden-section" id="chart"></div>
+</body>
+
+</html>
